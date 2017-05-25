@@ -161,6 +161,34 @@ func TestReaders(t *testing.T) {
 	}
 }
 
+var TestMessage = "Hello, World!"
+
+func TestTransparent(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	f, _ := fs.OpenFile("test", os.O_CREATE|os.O_RDWR, 0755)
+	tr := New(10, 0, f, f, f)
+	tr.WriteString(TestMessage)
+	tr.Seek(0, io.SeekStart)
+
+	r, _ := fs.OpenFile("test", os.O_RDONLY, 0755)
+	d, _ := ioutil.ReadAll(r)
+	if string(d) != TestMessage {
+		t.Errorf("Message was not written correctly")
+		t.Errorf("%v", d)
+		t.Errorf("%v", []byte(TestMessage))
+	}
+	r.Close()
+
+	d, err := ioutil.ReadAll(tr)
+	if err != nil {
+		t.Error(err)
+	}
+	if string(d) != TestMessage {
+		t.Errorf("Message could not be read back correctly!")
+	}
+
+}
+
 var doubleSeekReaderTests = []struct {
 	data     string
 	off      int64
@@ -187,13 +215,13 @@ var readTests = []struct {
 
 func TestReadFile(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	err := afero.WriteFile(fs, "test", []byte("HHeelllloo  WWoorrlldd"), 755)
+	err := afero.WriteFile(fs, "test", []byte("HHeelllloo  WWoorrlldd"), 0755)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 	for _, tt := range readTests {
-		file, err := fs.OpenFile("test", os.O_RDONLY, 755)
+		file, err := fs.OpenFile("test", os.O_RDONLY, 0755)
 		if err != nil {
 			t.Error(err)
 		}
@@ -218,7 +246,7 @@ func TestReadFile(t *testing.T) {
 
 func TestWriteIntoEmptyFile(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	file, _ := fs.OpenFile("test", os.O_CREATE|os.O_RDWR, 755)
+	file, _ := fs.OpenFile("test", os.O_CREATE|os.O_RDWR, 0755)
 	tr := NewReadWriteSeeker(1, 1, file, NewHalfReader(file), NewDoubleWriter(file))
 	data := []byte("Hello, World")
 	w, err := tr.Write([]byte(data))
@@ -251,12 +279,12 @@ func TestWriteFile(t *testing.T) {
 
 	for _, tt := range writeTests {
 		fs := afero.NewMemMapFs()
-		err := afero.WriteFile(fs, "test", []byte("HHeelllloo  WWoorrlldd"), 755)
+		err := afero.WriteFile(fs, "test", []byte("HHeelllloo  WWoorrlldd"), 0755)
 		if err != nil {
 			t.Error(err)
 			return
 		}
-		file, err := fs.OpenFile("test", os.O_RDWR, 755)
+		file, err := fs.OpenFile("test", os.O_RDWR, 0755)
 		if err != nil {
 			t.Error(err)
 		}
@@ -303,7 +331,7 @@ var seekTests = []struct {
 func TestSeekFile(t *testing.T) {
 	for _, tt := range seekTests {
 		fs := afero.NewMemMapFs()
-		file, err := fs.OpenFile("test", os.O_CREATE|os.O_RDWR, 755)
+		file, err := fs.OpenFile("test", os.O_CREATE|os.O_RDWR, 0755)
 		if err != nil {
 			t.Error(err)
 		}
@@ -315,7 +343,7 @@ func TestSeekFile(t *testing.T) {
 			}
 		}
 		file.Close()
-		file, err = fs.OpenFile("test", os.O_RDONLY, 755)
+		file, err = fs.OpenFile("test", os.O_RDONLY, 0755)
 		if err != nil {
 			t.Error(err)
 		}

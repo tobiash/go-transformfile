@@ -87,7 +87,7 @@ func (f *rws) Write(p []byte) (n int, err error) {
 		copied := copy(newBlock[blockOffset:], p[n:])
 		n += copied
 		f.index += int64(copied)
-		f.currentBlock = newBlock
+		f.currentBlock = newBlock[:blockOffset+int64(copied)]
 		err = f.flushCurrentBlock()
 		if err != nil {
 			return n, errors.Wrap(err, "Error flushing block")
@@ -141,8 +141,13 @@ func (f *rws) loadBlock() error {
 		return errors.Wrap(err, "Error seeking to start of block")
 	}
 	var b = make([]byte, f.blockSize)
-	read, err := f.Reader.Read(b)
-	f.currentBlock = b[:read]
+	var n int
+	for int64(n) < f.blockSize && err == nil {
+		var nn int
+		nn, err = f.Reader.Read(b[n:])
+		n += nn
+	}
+	f.currentBlock = b[:n]
 	f.currentBlockIdx = blockIdx
 
 	if err == io.EOF {
