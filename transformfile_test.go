@@ -197,7 +197,7 @@ func TestReadFile(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		tr := NewReadWriteSeeker(2, 1, file, NewHalfReader(file), nil)
+		tr := NewReadWriteSeeker(1, 1, file, NewHalfReader(file), nil)
 		_, err = tr.Seek(tt.startOffset, io.SeekStart)
 		if err != nil {
 			t.Error(err)
@@ -241,7 +241,7 @@ func TestWriteFile(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		tr := NewReadWriteSeeker(2, 1, file, NewHalfReader(file), NewDoubleWriter(file))
+		tr := NewReadWriteSeeker(1, 1, file, NewHalfReader(file), NewDoubleWriter(file))
 		_, err = tr.Seek(tt.startOffset, io.SeekStart)
 		if err != tt.expectedSeekErr {
 			t.Errorf("Unexpected error %v, expected %v", err, tt.expectedSeekErr)
@@ -301,7 +301,7 @@ func TestSeekFile(t *testing.T) {
 			t.Error(err)
 		}
 
-		tr := NewReadWriteSeeker(2, 1, file, NewHalfReader(file), nil)
+		tr := NewReadWriteSeeker(1, 1, file, NewHalfReader(file), nil)
 		sOff, err := tr.Seek(tt.startOffset, io.SeekStart)
 		if err != nil {
 			t.Error(err)

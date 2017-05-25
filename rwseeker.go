@@ -33,9 +33,9 @@ var (
 /*
 NewReadWriteSeeker takes transforming readers and writers and wraps around a seeker
 
-	blockSize 			The size of the block in the underlying file
+	blockSize 			The size of a block of data
 	blockOverhead 		The amount of overhead in a block.
-						blockSize - blockOverhead is the actual space for data
+						blockSize + blockOverhead is the actual space used
 */
 func NewReadWriteSeeker(
 	blockSize int64,
@@ -118,7 +118,7 @@ func (f *rws) flushCurrentBlock() error {
 	if f.currentBlock == nil || f.currentBlockIdx < 0 {
 		return nil // Nothing to flush is not an error :-)
 	}
-	f.Seeker.Seek(f.blockSize*f.currentBlockIdx, io.SeekStart)
+	f.Seeker.Seek((f.blockSize+f.blockOverhead)*f.currentBlockIdx, io.SeekStart)
 	written, err := f.Writer.Write(f.currentBlock)
 	if err != nil {
 		return err
@@ -136,7 +136,7 @@ func (f *rws) loadBlock() error {
 	if err != nil {
 		return errors.Wrap(err, "Error seeking to start of block")
 	}
-	var b = make([]byte, f.blockSize-f.blockOverhead)
+	var b = make([]byte, f.blockSize)
 	read, err := f.Reader.Read(b)
 	f.currentBlock = b[:read]
 	f.currentBlockIdx = blockIdx
@@ -154,7 +154,7 @@ func (f *rws) loadBlock() error {
 
 // Seeks the source file to the start of the given block
 func (f *rws) seekSourceToBlock(blockIdx int64) error {
-	seekTarget := blockIdx * f.blockSize
+	seekTarget := blockIdx * (f.blockSize + f.blockOverhead)
 	if seekTarget < 0 {
 		return ErrInvalidSeek
 	}
@@ -171,16 +171,16 @@ func (f *rws) seekSourceToBlock(blockIdx int64) error {
 // Returns the block that contains the current index
 // as well as the offset of the position within the block
 func (f *rws) position() (block, offset int64) {
-	return f.index / (f.blockSize - f.blockOverhead), f.index % (f.blockSize - f.blockOverhead)
+	return f.index / f.blockSize, f.index % f.blockSize
 }
 
 // Accounts for block overhead for the given offset
 func (f *rws) addOverhead(offset int64) int64 {
-	numBlocks := offset / (f.blockSize - f.blockOverhead)
+	numBlocks := offset / f.blockSize
 	return offset + numBlocks*f.blockOverhead
 }
 
 func (f *rws) removeOverhead(offset int64) int64 {
-	numBlocks := offset / f.blockSize
+	numBlocks := offset / (f.blockSize + f.blockOverhead)
 	return offset - numBlocks*f.blockOverhead
 }
