@@ -8,10 +8,11 @@ import (
 )
 
 /*
+Internal data-structure for transformed files
 Allow block-wise transformation of a file while preserving file-like
 (random access) capabilities.
 */
-type file struct {
+type rws struct {
 	blockSize     int64
 	blockOverhead int64
 	index         int64
@@ -24,22 +25,29 @@ type file struct {
 }
 
 var (
+	/* ErrInvalidSeek marks invalid seek operations	*/
 	ErrInvalidSeek         = fmt.Errorf("invalid argument")
-	ErrUnsupportedSeekMode = fmt.Errorf("unsupported seek mode")
+	errUnsupportedSeekMode = fmt.Errorf("unsupported seek mode")
 )
 
 /*
-New transform file
+NewReadWriteSeeker takes transforming readers and writers and wraps around a seeker
 
 	blockSize 			The size of the block in the underlying file
 	blockOverhead 		The amount of overhead in a block.
 						blockSize - blockOverhead is the actual space for data
 */
-func New(blockSize int64, blockOverhead int64, seeker io.Seeker, reader io.Reader, writer io.Writer) io.ReadWriteSeeker {
-	return &file{blockSize, blockOverhead, 0, reader, writer, seeker, nil, -1, false}
+func NewReadWriteSeeker(
+	blockSize int64,
+	blockOverhead int64,
+	seeker io.Seeker,
+	reader io.Reader,
+	writer io.Writer,
+) io.ReadWriteSeeker {
+	return &rws{blockSize, blockOverhead, 0, reader, writer, seeker, nil, -1, false}
 }
 
-func (f *file) Seek(offset int64, whence int) (int64, error) {
+func (f *rws) Seek(offset int64, whence int) (int64, error) {
 	switch whence {
 	case io.SeekStart:
 		sPos := f.addOverhead(offset)
@@ -58,11 +66,11 @@ func (f *file) Seek(offset int64, whence int) (int64, error) {
 	case io.SeekCurrent:
 		return f.Seek(f.index+offset, io.SeekStart)
 	default:
-		return f.index, ErrUnsupportedSeekMode
+		return f.index, errUnsupportedSeekMode
 	}
 }
 
-func (f *file) Write(p []byte) (n int, err error) {
+func (f *rws) Write(p []byte) (n int, err error) {
 	for len(p)-n > 0 {
 		err = f.loadBlock()
 		if err != nil {
@@ -84,7 +92,7 @@ func (f *file) Write(p []byte) (n int, err error) {
 	return n, nil
 }
 
-func (f *file) Read(p []byte) (n int, err error) {
+func (f *rws) Read(p []byte) (n int, err error) {
 	for len(p)-n > 0 {
 		err = f.loadBlock()
 		_, blockOffset := f.position()
@@ -101,12 +109,12 @@ func (f *file) Read(p []byte) (n int, err error) {
 	return n, err
 }
 
-func (f *file) resetCurrentBlock() {
+func (f *rws) resetCurrentBlock() {
 	f.currentBlock = nil
 	f.currentBlockIdx = -1
 }
 
-func (f *file) flushCurrentBlock() error {
+func (f *rws) flushCurrentBlock() error {
 	if f.currentBlock == nil || f.currentBlockIdx < 0 {
 		return nil // Nothing to flush is not an error :-)
 	}
@@ -122,7 +130,7 @@ func (f *file) flushCurrentBlock() error {
 }
 
 // Loads the block for the current index
-func (f *file) loadBlock() error {
+func (f *rws) loadBlock() error {
 	blockIdx, _ := f.position()
 	err := f.seekSourceToBlock(blockIdx)
 	if err != nil {
@@ -145,7 +153,7 @@ func (f *file) loadBlock() error {
 }
 
 // Seeks the source file to the start of the given block
-func (f *file) seekSourceToBlock(blockIdx int64) error {
+func (f *rws) seekSourceToBlock(blockIdx int64) error {
 	seekTarget := blockIdx * f.blockSize
 	if seekTarget < 0 {
 		return ErrInvalidSeek
@@ -162,71 +170,17 @@ func (f *file) seekSourceToBlock(blockIdx int64) error {
 
 // Returns the block that contains the current index
 // as well as the offset of the position within the block
-func (f *file) position() (block, offset int64) {
+func (f *rws) position() (block, offset int64) {
 	return f.index / (f.blockSize - f.blockOverhead), f.index % (f.blockSize - f.blockOverhead)
 }
 
 // Accounts for block overhead for the given offset
-func (f *file) addOverhead(offset int64) int64 {
+func (f *rws) addOverhead(offset int64) int64 {
 	numBlocks := offset / (f.blockSize - f.blockOverhead)
 	return offset + numBlocks*f.blockOverhead
 }
 
-func (f *file) removeOverhead(offset int64) int64 {
+func (f *rws) removeOverhead(offset int64) int64 {
 	numBlocks := offset / f.blockSize
 	return offset - numBlocks*f.blockOverhead
 }
-
-// func (f *file) Name() string {
-// 	return f.backingFile.Name()
-// }
-
-// func (f *file) Readdir(count int) ([]os.FileInfo, error) {
-// 	return f.backingFile.Readdir(count)
-// }
-
-// func (f *file) Readdirnames(n int) ([]string, error) {
-// 	return f.backingFile.Readdirnames(n)
-// }
-
-// func (f *file) Stat() (os.FileInfo, error) {
-// 	return f.backingFile.Stat()
-// }
-
-// func (f *file) Sync() error {
-// 	return f.backingFile.Sync()
-// }
-
-// func (f *file) Truncate(size int64) error {
-// 	// Calculate size to take overhead into account
-
-// 	return f.backingFile.Truncate(size)
-// }
-
-// func (f *file) WriteString(s string) (ret int, err error) {
-// 	return f.Write([]byte(s))
-// }
-
-// func (f *file) Write(p []byte) (n int, err error) {
-// 	return f.Write(p)
-// }
-
-// func (f *file) Read(p []byte) (n int, err error) {
-// 	return f.Read(p)
-// }
-
-// func (f *file) Close() error {
-// 	return f.backingFile.Close()
-// }
-
-// func (f *file) Seek(offset int64, whence int) (int64, error) {
-// 	return f.backingFile.Seek(offset, whence)
-// }
-
-// func (f *file) ReadAt(p []byte, off int64) (int, error) {
-// 	return f.backingFile.ReadAt(p, off)
-// }
-
-// func (f *file) WriteAt(p []byte, off int64) (int, error) {
-// 	return f.backingFile.WriteAt(p, off)
-// }
