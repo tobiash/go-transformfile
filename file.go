@@ -92,9 +92,7 @@ func (f *file) Stat() (os.FileInfo, error) {
 }
 
 func (f *file) Sync() error {
-	flushErr := f.rws.flushCurrentBlock()
-	syncErr := f.backing.Sync()
-	return combineErrors(flushErr, syncErr)
+	return f.backing.Sync()
 }
 
 func (f *file) Truncate(size int64) error {
