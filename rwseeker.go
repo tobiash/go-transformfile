@@ -14,7 +14,7 @@ Allow block-wise transformation of a file while preserving file-like
 */
 type rws struct {
 	blockSize     int64
-	blockOverhead int64
+	blockOverhead int
 	index         int64
 	io.Reader
 	io.Writer
@@ -39,7 +39,7 @@ NewReadWriteSeeker takes transforming readers and writers and wraps around a see
 */
 func NewReadWriteSeeker(
 	blockSize int64,
-	blockOverhead int64,
+	blockOverhead int,
 	seeker io.Seeker,
 	reader io.Reader,
 	writer io.Writer,
@@ -122,7 +122,7 @@ func (f *rws) flushCurrentBlock() error {
 	if f.currentBlock == nil || f.currentBlockIdx < 0 {
 		return nil // Nothing to flush is not an error :-)
 	}
-	f.Seeker.Seek((f.blockSize+f.blockOverhead)*f.currentBlockIdx, io.SeekStart)
+	f.Seeker.Seek((f.blockSize+int64(f.blockOverhead))*f.currentBlockIdx, io.SeekStart)
 	written, err := f.Writer.Write(f.currentBlock)
 	if err != nil {
 		return err
@@ -163,7 +163,7 @@ func (f *rws) loadBlock() error {
 
 // Seeks the source file to the start of the given block
 func (f *rws) seekSourceToBlock(blockIdx int64) error {
-	seekTarget := blockIdx * (f.blockSize + f.blockOverhead)
+	seekTarget := blockIdx * (f.blockSize + int64(f.blockOverhead))
 	if seekTarget < 0 {
 		return ErrInvalidSeek
 	}
@@ -186,10 +186,10 @@ func (f *rws) position() (block, offset int64) {
 // Accounts for block overhead for the given offset
 func (f *rws) addOverhead(offset int64) int64 {
 	numBlocks := offset / f.blockSize
-	return offset + numBlocks*f.blockOverhead
+	return offset + numBlocks*int64(f.blockOverhead)
 }
 
 func (f *rws) removeOverhead(offset int64) int64 {
-	numBlocks := offset / (f.blockSize + f.blockOverhead)
-	return offset - numBlocks*f.blockOverhead
+	numBlocks := offset / (f.blockSize + int64(f.blockOverhead))
+	return offset - numBlocks*int64(f.blockOverhead)
 }
