@@ -216,6 +216,25 @@ func TestReadFile(t *testing.T) {
 	}
 }
 
+func TestWriteIntoEmptyFile(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	file, _ := fs.OpenFile("test", os.O_CREATE|os.O_RDWR, 755)
+	tr := NewReadWriteSeeker(1, 1, file, NewHalfReader(file), NewDoubleWriter(file))
+	data := []byte("Hello, World")
+	w, err := tr.Write([]byte(data))
+	if err != nil {
+		t.Error(err)
+	}
+	if w != len(data) {
+		t.Errorf("Expected %d bytes to be written, but %d were written", len(data), w)
+	}
+	tr.Seek(0, io.SeekStart)
+	contents, _ := ioutil.ReadAll(tr)
+	if string(contents) != string(data) {
+		t.Errorf("Unexpected file contents \"%s\"", string(contents))
+	}
+}
+
 //
 var writeTests = []struct {
 	startOffset      int64

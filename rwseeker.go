@@ -81,9 +81,13 @@ func (f *rws) Write(p []byte) (n int, err error) {
 			// TODO
 			return n, fmt.Errorf("Invalid offset %d", blockOffset)
 		}
-		copied := copy(f.currentBlock[blockOffset:], p[n:])
+		// TODO Make this more efficient
+		var newBlock = make([]byte, f.blockSize)
+		copy(newBlock, f.currentBlock[:blockOffset])
+		copied := copy(newBlock[blockOffset:], p[n:])
 		n += copied
 		f.index += int64(copied)
+		f.currentBlock = newBlock
 		err = f.flushCurrentBlock()
 		if err != nil {
 			return n, errors.Wrap(err, "Error flushing block")
