@@ -30,19 +30,22 @@ type File interface {
 
 type file struct {
 	rws
-	backing File
+	readOnly bool
+	backing  File
 }
 
 type transformBlockWriter struct {
 	transform.Transformer
 	io.Writer
-	overhead int
+	blockSize int64
+	overhead  int
 }
 
 type transformBlockReader struct {
 	transform.Transformer
 	io.Reader
-	overhead int
+	blockSize int64
+	overhead  int
 }
 
 func (w *transformBlockWriter) Write(p []byte) (n int, err error) {
@@ -56,11 +59,16 @@ func (w *transformBlockWriter) Write(p []byte) (n int, err error) {
 
 func (w *transformBlockReader) Read(p []byte) (n int, err error) {
 	var b = make([]byte, len(p)+w.overhead)
-	m, err := w.Reader.Read(b)
+	var m int
+	for len(b)-m > 0 && err == nil {
+		var mm int
+		mm, err = w.Reader.Read(b[m:])
+		m += mm
+	}
 	tr, n, trerr := transform.Bytes(w.Transformer, b[:m])
 	copy(p, tr)
 	if err != nil {
-		return n, err
+		return len(tr), err
 	}
 	return len(tr), trerr
 }
@@ -76,11 +84,13 @@ func New(
 	blockSize int64,
 	blockOverhead int,
 	backing File,
+	readOnly bool,
 	reader io.Reader,
 	writer io.Writer,
 ) File {
 	return &file{
 		rws{blockSize, blockOverhead, 0, reader, writer, backing, nil, -1, false},
+		readOnly,
 		backing,
 	}
 }
@@ -89,6 +99,7 @@ func NewFromTransformer(
 	blockSize int64,
 	blockOverhead int,
 	backing File,
+	readOnly bool,
 	readTransformer transform.Transformer,
 	writeTransformer transform.Transformer,
 ) File {
@@ -97,13 +108,14 @@ func NewFromTransformer(
 			blockSize,
 			blockOverhead,
 			0,
-			&transformBlockReader{readTransformer, backing, blockOverhead},
-			&transformBlockWriter{writeTransformer, backing, blockOverhead},
+			&transformBlockReader{readTransformer, backing, blockSize, blockOverhead},
+			&transformBlockWriter{writeTransformer, backing, blockSize, blockOverhead},
 			backing,
 			nil,
 			-1,
 			false,
 		},
+		readOnly,
 		backing,
 	}
 }
@@ -155,10 +167,18 @@ func (f *file) Sync() error {
 	return f.backing.Sync()
 }
 
+func (f *file) Read(p []byte) (n int, err error) {
+	return f.rws.Read(p)
+}
+
 func (f *file) Truncate(size int64) error {
 	// Calculate size to take overhead into account
 	// Rewrite last block
 	return fmt.Errorf("Truncating not implemented yet")
+}
+
+func (f *file) Seek(offset int64, whence int) (int64, error) {
+	return f.rws.Seek(offset, whence)
 }
 
 func combineErrors(errs ...error) error {

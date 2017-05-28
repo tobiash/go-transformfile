@@ -87,6 +87,11 @@ func (f *rws) Write(p []byte) (n int, err error) {
 		copied := copy(newBlock[blockOffset:], p[n:])
 		n += copied
 		f.index += int64(copied)
+		// copy the rest of the existing block
+		aoff := blockOffset + int64(copied)
+		if int64(len(f.currentBlock)) > aoff {
+			copied += copy(newBlock[aoff:], f.currentBlock[aoff:])
+		}
 		f.currentBlock = newBlock[:blockOffset+int64(copied)]
 		err = f.flushCurrentBlock()
 		if err != nil {
@@ -97,7 +102,7 @@ func (f *rws) Write(p []byte) (n int, err error) {
 }
 
 func (f *rws) Read(p []byte) (n int, err error) {
-	for len(p)-n > 0 {
+	for len(p)-n > 0 && err == nil {
 		err = f.loadBlock()
 		_, blockOffset := f.position()
 		if blockOffset < 0 || blockOffset > int64(len(f.currentBlock)) {
@@ -111,6 +116,13 @@ func (f *rws) Read(p []byte) (n int, err error) {
 		}
 	}
 	return n, err
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (f *rws) resetCurrentBlock() {
@@ -186,10 +198,18 @@ func (f *rws) position() (block, offset int64) {
 // Accounts for block overhead for the given offset
 func (f *rws) addOverhead(offset int64) int64 {
 	numBlocks := offset / f.blockSize
+	if offset%f.blockSize > 0 {
+		numBlocks++
+	}
 	return offset + numBlocks*int64(f.blockOverhead)
 }
 
 func (f *rws) removeOverhead(offset int64) int64 {
-	numBlocks := offset / (f.blockSize + int64(f.blockOverhead))
+	bs := f.blockSize + int64(f.blockOverhead)
+	numBlocks := offset / bs
+	// Probably there is a better way to ceil this? Floats?
+	if offset%bs > 0 {
+		numBlocks++
+	}
 	return offset - numBlocks*int64(f.blockOverhead)
 }
