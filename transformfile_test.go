@@ -166,7 +166,7 @@ var TestMessage = "Hello, World!"
 func TestTransparent(t *testing.T) {
 	fs := afero.NewMemMapFs()
 	f, _ := fs.OpenFile("test", os.O_CREATE|os.O_RDWR, 0755)
-	tr := New(10, 0, f, f, f)
+	tr := New(10, 0, f, false, f, f)
 	tr.WriteString(TestMessage)
 	tr.Seek(0, io.SeekStart)
 
@@ -363,6 +363,37 @@ func TestSeekFile(t *testing.T) {
 		}
 		if newOffset != tt.expectedOffset {
 			t.Errorf("Unexpected seek result %d, expected %d", newOffset, tt.expectedOffset)
+		}
+	}
+}
+
+func TestMergeBlocks(t *testing.T) {
+	var mergeTests = []struct {
+		block     string
+		insert    string
+		offset    int64
+		blockSize int64
+		written   int
+		result    string
+	}{
+		// {"Hello World!", "WORLD", 6, 20, 5, "Hello WORLD!"},
+		// {"Hello", " World", 5, 20, 6, "Hello World"},
+		// {"Hello ", " World", 5, 20, 6, "Hello World"},
+		// {"Hello World!", "HELLO", 0, 20, 5, "HELLO World!"},
+		// // Always enforce blockSize
+		// {"Hello ", "World!", 6, 10, 4, "Hello Worl"},
+		{"Hello World!", "World!", 6, 10, 4, "Hello Worl"},
+	}
+	for _, tt := range mergeTests {
+		// Copy the target block to test
+		b := make([]byte, len(tt.block))
+		copy(b, []byte(tt.block))
+		b, n := mergeBlocks(b, []byte(tt.insert), tt.offset, tt.blockSize)
+		if n != tt.written {
+			t.Error(tt.block, tt.insert, "Unexpected bytes written", n, tt.written)
+		}
+		if string(b) != tt.result {
+			t.Error(tt.block, tt.insert, "Unexpected result", string(b), tt.result)
 		}
 	}
 }

@@ -81,18 +81,10 @@ func (f *rws) Write(p []byte) (n int, err error) {
 			// TODO
 			return n, fmt.Errorf("Invalid offset %d", blockOffset)
 		}
-		// TODO Make this more efficient
-		var newBlock = make([]byte, f.blockSize)
-		copy(newBlock, f.currentBlock[:blockOffset])
-		copied := copy(newBlock[blockOffset:], p[n:])
+		b, copied := mergeBlocks(f.currentBlock, p[n:], blockOffset, f.blockSize)
 		n += copied
 		f.index += int64(copied)
-		// copy the rest of the existing block
-		aoff := blockOffset + int64(copied)
-		if int64(len(f.currentBlock)) > aoff {
-			copied += copy(newBlock[aoff:], f.currentBlock[aoff:])
-		}
-		f.currentBlock = newBlock[:blockOffset+int64(copied)]
+		f.currentBlock = b
 		err = f.flushCurrentBlock()
 		if err != nil {
 			return n, errors.Wrap(err, "Error flushing block")
@@ -116,13 +108,6 @@ func (f *rws) Read(p []byte) (n int, err error) {
 		}
 	}
 	return n, err
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 func (f *rws) resetCurrentBlock() {
@@ -212,4 +197,30 @@ func (f *rws) removeOverhead(offset int64) int64 {
 		numBlocks++
 	}
 	return offset - numBlocks*int64(f.blockOverhead)
+}
+
+// Merge insert into block at offset, appending if necessary up to blockSize
+// Returns the updated block and the number of bytes inserted
+func mergeBlocks(block, insert []byte, offset, blockSize int64) ([]byte, int) {
+	slen := int64(len(block))
+	if int64(len(block)) < offset {
+		block = append(block, make([]byte, offset-int64(len(block)))...)
+	}
+	n := int(min(int64(len(insert)), blockSize-offset)) // Safe since slice length is within int range
+	block = append(block[:offset], insert[:n]...)
+	return block[:min(max(slen, int64(len(block))), blockSize)], n
+}
+
+func max(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func min(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
 }
