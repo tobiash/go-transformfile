@@ -48,6 +48,22 @@ type transformBlockReader struct {
 	overhead  int
 }
 
+type fileinfo struct {
+	os.FileInfo
+	blockSize int64
+	overhead  int
+}
+
+func (i *fileinfo) Size() int64 {
+	actualSize := i.FileInfo.Size()
+	bs := i.blockSize + int64(i.overhead)
+	numBlocks := actualSize / bs
+	if actualSize%bs > 0 {
+		numBlocks++
+	}
+	return actualSize - numBlocks*int64(i.overhead)
+}
+
 func (w *transformBlockWriter) Write(p []byte) (n int, err error) {
 	tr, _, err := transform.Bytes(w.Transformer, p)
 	if err != nil {
@@ -159,8 +175,11 @@ func (f *file) Readdirnames(n int) ([]string, error) {
 }
 
 func (f *file) Stat() (os.FileInfo, error) {
-	// TODO Account for overhead
-	return f.backing.Stat()
+	info, err := f.backing.Stat()
+	if info != nil {
+		info = &fileinfo{info, f.blockSize, f.blockOverhead}
+	}
+	return info, err
 }
 
 func (f *file) Sync() error {
